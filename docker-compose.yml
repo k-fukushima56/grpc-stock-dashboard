@@ -1,0 +1,31 @@
+services:
+  grpc-stock-server:
+    build:
+      context: ./GrpcStockServer
+      dockerfile: Dockerfile
+    container_name: grpc-stock-server
+    ports:
+      - "50051:50051"
+    networks:
+      - grpc-network
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+
+  grpc-stock-web:
+    build:
+      context: ./GrpcStockWeb
+      dockerfile: Dockerfile
+    container_name: grpc-stock-web
+    ports:
+      - "8080:8080"
+    networks:
+      - grpc-network
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - GRPC_SERVER_ADDRESS=http://grpc-stock-server:50051
+    depends_on:
+      - grpc-stock-server
+
+networks:
+  grpc-network:
+    driver: bridge

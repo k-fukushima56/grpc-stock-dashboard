@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+option csharp_namespace = "GrpcStock";
+
+package stock;
+
+// 株価配信リクエスト
+message StockRequest {
+  repeated string symbols = 1;  // 監視する銘柄コード例: ["AAPL", "GOOGL", "MSFT"]
+}
+
+// 株価データ
+message StockPrice {
+  string symbol     = 1;  // 銘柄コード
+  double price      = 2;  // 現在値
+  double change     = 3;  // 前回比変動額
+  double change_pct = 4;  // 前回比変動率(%)
+  string updated_at = 5;  // 更新日時
+}
+
+// 株価配信サービス
+service StockService {
+  // Server Streaming：リクエスト1回 → 株価データが定期的に流れてくる
+  rpc StreamPrices (StockRequest) returns (stream StockPrice);
+}

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>gRPC リアルタイム株価ダッシュボード</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    header h1 { font-size: 1.5rem; font-weight: 700; }
+
+    .badge {
+      font-size: 0.75rem;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+    .badge-live    { background: #22c55e20; color: #22c55e; border: 1px solid #22c55e; }
+    .badge-stopped { background: #ef444420; color: #ef4444; border: 1px solid #ef4444; }
+
+    .subtitle {
+      font-size: 0.8rem;
+      color: #64748b;
+      margin-left: auto;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px;
+      transition: border-color 0.3s;
+    }
+    .card.up   { border-color: #22c55e44; }
+    .card.down { border-color: #ef444444; }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .symbol { font-size: 1.2rem; font-weight: 700; color: #f1f5f9; }
+    .time   { font-size: 0.72rem; color: #64748b; }
+
+    .price {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 6px;
+    }
+
+    .change {
+      font-size: 0.9rem;
+      font-weight: 600;
+      display: flex;
+      gap: 8px;
+    }
+    .up   .price,  .up   .change { color: #22c55e; }
+    .down .price,  .down .change { color: #ef4444; }
+    .neutral .price, .neutral .change { color: #94a3b8; }
+
+    .arrow { font-size: 1rem; }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    button {
+      padding: 8px 20px;
+      border-radius: 8px;
+      border: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    button:hover { opacity: 0.85; }
+
+    #btnStart { background: #22c55e; color: #fff; }
+    #btnStop  { background: #ef4444; color: #fff; }
+
+    .log {
+      margin-top: 24px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 0.78rem;
+      color: #64748b;
+      max-height: 140px;
+      overflow-y: auto;
+    }
+    .log p { margin-bottom: 4px; }
+    .log .info  { color: #38bdf8; }
+    .log .error { color: #f87171; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📈 リアルタイム株価ダッシュボード</h1>
+  <span id="statusBadge" class="badge badge-stopped">● STOPPED</span>
+  <span class="subtitle">powered by gRPC Server Streaming</span>
+</header>
+
+<div class="controls">
+  <button id="btnStart">▶ 配信開始</button>
+  <button id="btnStop">■ 停止</button>
+</div>
+
+<div class="grid" id="grid">
+  <!-- カードはJavaScriptで動的に生成 -->
+</div>
+
+<div class="log" id="log">
+  <p class="info">配信開始ボタンを押してください。</p>
+</div>
+
+<script>
+  const SYMBOLS = ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA', 'META'];
+  let eventSource = null;
+
+  const grid        = document.getElementById('grid');
+  const logEl       = document.getElementById('log');
+  const statusBadge = document.getElementById('statusBadge');
+
+  // カードの初期化
+  SYMBOLS.forEach(sym => {
+    const card = document.createElement('div');
+    card.className = 'card neutral';
+    card.id = `card-${sym}`;
+    card.innerHTML = `
+      <div class="card-header">
+        <span class="symbol">${sym}</span>
+        <span class="time" id="time-${sym}">--:--:--</span>
+      </div>
+      <div class="price" id="price-${sym}">---.--</div>
+      <div class="change">
+        <span class="arrow" id="arrow-${sym}">→</span>
+        <span id="change-${sym}">0.00</span>
+        <span id="pct-${sym}">(0.00%)</span>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+
+  function addLog(msg, type = '') {
+    const p = document.createElement('p');
+    p.className = type;
+    p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    logEl.prepend(p);
+    // 最大20件
+    while (logEl.children.length > 20) logEl.removeChild(logEl.lastChild);
+  }
+
+  function updateCard(data) {
+    const card    = document.getElementById(`card-${data.symbol}`);
+    const priceEl = document.getElementById(`price-${data.symbol}`);
+    const changeEl= document.getElementById(`change-${data.symbol}`);
+    const pctEl   = document.getElementById(`pct-${data.symbol}`);
+    const arrowEl = document.getElementById(`arrow-${data.symbol}`);
+    const timeEl  = document.getElementById(`time-${data.symbol}`);
+    if (!card) return;
+
+    const up = data.change > 0;
+    const dn = data.change < 0;
+
+    card.className    = `card ${up ? 'up' : dn ? 'down' : 'neutral'}`;
+    priceEl.textContent  = `$${data.price.toFixed(2)}`;
+    changeEl.textContent = `${up ? '+' : ''}${data.change.toFixed(2)}`;
+    pctEl.textContent    = `(${up ? '+' : ''}${data.changePct.toFixed(2)}%)`;
+    arrowEl.textContent  = up ? '▲' : dn ? '▼' : '→';
+    timeEl.textContent   = data.updatedAt;
+  }
+
+  document.getElementById('btnStart').addEventListener('click', () => {
+    if (eventSource) eventSource.close();
+
+    addLog('gRPC Server Streaming 接続開始...', 'info');
+    eventSource = new EventSource('/api/stocks/stream');
+
+    eventSource.onopen = () => {
+      statusBadge.textContent = '● LIVE';
+      statusBadge.className   = 'badge badge-live';
+      addLog('接続しました。株価データを受信中...', 'info');
+    };
+
+    eventSource.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      updateCard(data);
+    };
+
+    eventSource.onerror = () => {
+      statusBadge.textContent = '● STOPPED';
+      statusBadge.className   = 'badge badge-stopped';
+      addLog('接続が切断されました。', 'error');
+      eventSource.close();
+    };
+  });
+
+  document.getElementById('btnStop').addEventListener('click', () => {
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+    statusBadge.textContent = '● STOPPED';
+    statusBadge.className   = 'badge badge-stopped';
+    addLog('配信を停止しました。');
+  });
+</script>
+</body>
+</html>
