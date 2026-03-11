@@ -68,7 +68,7 @@ job "grpc-stock" {
 
       env {
         NOMAD_PORT_web       = "${NOMAD_PORT_web}"
-        # gRPCサーバのアドレスをConsulで解決（Consul未使用の場合は直接指定）
+        # gRPCサーバのアドレスをNomadネットワークで解決
         GRPC_SERVER_ADDRESS  = "http://${NOMAD_ADDR_grpc}"
       }
 
