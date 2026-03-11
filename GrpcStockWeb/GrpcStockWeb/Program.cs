@@ -25,7 +25,13 @@ app.MapGet("/api/stocks/stream", async (HttpContext ctx) =>
 
     AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
 
-    using var channel = GrpcChannel.ForAddress(grpcServerAddress);
+    var handler = new HttpClientHandler();
+    handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+    
+    using var channel = GrpcChannel.ForAddress(grpcServerAddress, new GrpcChannelOptions
+    {
+        HttpHandler = handler
+    });
     var client  = new StockService.StockServiceClient(channel);
     var request = new StockRequest();
     request.Symbols.AddRange(new[] { "AAPL", "GOOGL", "MSFT", "AMZN", "TSLA", "META" });
