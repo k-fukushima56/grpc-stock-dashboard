@@ -1,0 +1,18 @@
+syntax = "proto3";
+option csharp_namespace = "GrpcStock";
+package stock;
+
+// コメントメッセージ（送信・受信で同じ型を使う）
+message CommentMessage {
+  string user_name = 1;  // 投稿者名（例: "User-A42F"）
+  string symbol    = 2;  // 対象銘柄（例: "AAPL"、空文字=全体向け）
+  string text      = 3;  // コメント本文
+  string sent_at   = 4;  // 送信時刻（HH:mm:ss）
+}
+
+// コメントサービス
+service CommentService {
+  // Bidirectional Streaming：
+  // クライアントはコメントを送り続け、サーバは全員のコメントを返し続ける
+  rpc ChatStream (stream CommentMessage) returns (stream CommentMessage);
+}

@@ -9,6 +9,7 @@ var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 app.MapGrpcService<StockServiceImpl>();
+app.MapGrpcService<CommentServiceImpl>();
 app.MapGet("/", () => "gRPC Stock Server is running...");
 
 // ポート50051で起動

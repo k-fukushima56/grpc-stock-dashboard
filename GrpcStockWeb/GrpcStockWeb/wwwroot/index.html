@@ -39,11 +39,104 @@
       margin-left: auto;
     }
 
+    .main-container {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .grid-container {
+      flex: 1;
+    }
+
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
       gap: 16px;
     }
+
+    .comment-panel {
+      width: 320px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .comment-header {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #f1f5f9;
+    }
+
+    .comment-list {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 400px;
+      margin-bottom: 16px;
+    }
+
+    .comment-item {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin-bottom: 8px;
+      font-size: 0.85rem;
+    }
+
+    .comment-item.my-comment {
+      background: #1e3a5f;
+      border-color: #3b82f6;
+    }
+
+    .comment-time { color: #64748b; font-size: 0.75rem; }
+    .comment-user { color: #22c55e; font-weight: 600; }
+    .comment-symbol { color: #f59e0b; font-weight: 500; }
+    .comment-text { color: #e2e8f0; margin-top: 2px; }
+
+    .comment-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .symbol-select {
+      padding: 8px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      color: #e2e8f0;
+    }
+
+    .comment-input-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    .comment-input {
+      flex: 1;
+      padding: 8px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      color: #e2e8f0;
+    }
+
+    .comment-send {
+      padding: 8px 16px;
+      background: #22c55e;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .comment-send:hover { background: #16a34a; }
 
     .card {
       background: #1e293b;
@@ -133,8 +226,37 @@
   <button id="btnStop">■ 停止</button>
 </div>
 
-<div class="grid" id="grid">
-  <!-- カードはJavaScriptで動的に生成 -->
+<div class="main-container">
+  <div class="grid-container">
+    <div class="grid" id="grid">
+      <!-- カードはJavaScriptで動的に生成 -->
+    </div>
+  </div>
+
+  <div class="comment-panel">
+    <div class="comment-header">💬 ライブコメント</div>
+    
+    <div class="comment-list" id="commentList">
+      <!-- コメントはJavaScriptで動的に生成 -->
+    </div>
+
+    <div class="comment-controls">
+      <select id="symbolSelect" class="symbol-select">
+        <option value="">全体</option>
+        <option value="AAPL">AAPL</option>
+        <option value="GOOGL">GOOGL</option>
+        <option value="MSFT">MSFT</option>
+        <option value="AMZN">AMZN</option>
+        <option value="TSLA">TSLA</option>
+        <option value="META">META</option>
+      </select>
+      
+      <div class="comment-input-group">
+        <input id="commentInput" class="comment-input" type="text" placeholder="コメントを入力..." maxlength="100">
+        <button id="commentSend" class="comment-send">送信</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="log" id="log">
@@ -144,6 +266,10 @@
 <script>
   const SYMBOLS = ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA', 'META'];
   let eventSource = null;
+  
+  // コメント機能用変数
+  const myUserName = 'User-' + Math.random().toString(36).substr(2, 4).toUpperCase();
+  let ws = null;
 
   const grid        = document.getElementById('grid');
   const logEl       = document.getElementById('log');
@@ -198,6 +324,55 @@
     timeEl.textContent   = data.updatedAt;
   }
 
+  // コメントWS接続
+  function connectCommentWs() {
+    ws = new WebSocket(`ws://${location.host}/ws/comments`);
+
+    ws.onopen = () => {
+      addLog(`コメント接続完了（Bidirectional gRPC）as ${myUserName}`, 'info');
+    };
+
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      appendComment(data);
+    };
+
+    ws.onerror = () => addLog('コメントWS エラー', 'error');
+    ws.onclose = () => addLog('コメントWS 切断', 'error');
+  }
+
+  // コメント送信
+  function sendComment() {
+    const input = document.getElementById('commentInput');
+    const symbol = document.getElementById('symbolSelect').value;
+    const text = input.value.trim();
+    if (!ws || ws.readyState !== WebSocket.OPEN || !text) return;
+
+    ws.send(JSON.stringify({ userName: myUserName, symbol, text }));
+    input.value = '';
+  }
+
+  // コメント表示
+  function appendComment(data) {
+    const panel = document.getElementById('commentList');
+    const div = document.createElement('div');
+    div.className = 'comment-item';
+    div.style.background = data.userName === myUserName ? '#1e3a5f' : '#1e293b';
+    div.innerHTML = `
+        <span class="comment-time">[${data.sentAt}]</span>
+        <span class="comment-user">${data.userName}</span>
+        <span class="comment-symbol">(${data.symbol || '全体'})</span>:
+        <span class="comment-text">${escapeHtml(data.text)}</span>
+    `;
+    panel.prepend(div);
+    // 最大50件
+    while (panel.children.length > 50) panel.removeChild(panel.lastChild);
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
   document.getElementById('btnStart').addEventListener('click', () => {
     if (eventSource) eventSource.close();
 
@@ -208,6 +383,7 @@
       statusBadge.textContent = '● LIVE';
       statusBadge.className   = 'badge badge-live';
       addLog('接続しました。株価データを受信中...', 'info');
+      connectCommentWs();  // コメント接続も開始
     };
 
     eventSource.onmessage = (e) => {
@@ -228,9 +404,21 @@
       eventSource.close();
       eventSource = null;
     }
+    if (ws) { ws.close(); ws = null; }  // コメント接続も停止
     statusBadge.textContent = '● STOPPED';
     statusBadge.className   = 'badge badge-stopped';
     addLog('配信を停止しました。');
+  });
+
+  // コメント送信ボタン
+  document.getElementById('commentSend').addEventListener('click', sendComment);
+
+  // Enterキーで送信
+  document.getElementById('commentInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendComment();
+    }
   });
 </script>
 </body>
