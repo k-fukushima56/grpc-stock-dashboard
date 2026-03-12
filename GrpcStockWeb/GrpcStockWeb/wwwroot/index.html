@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>gRPC リアルタイム株価ダッシュボード</title>
+  <!-- html2canvas for screenshot functionality -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -181,7 +183,24 @@
       display: flex;
       gap: 10px;
       margin-bottom: 20px;
+      align-items: center;
     }
+
+    .evidence-controls {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+    }
+
+    .evidence-controls button {
+      padding: 6px 12px;
+      font-size: 0.8rem;
+      border-radius: 6px;
+    }
+
+    #btnScreenshot { background: #3b82f6; color: white; }
+    #btnRecord { background: #ef4444; color: white; }
+    #btnStopRecord { background: #f59e0b; color: white; }
 
     button {
       padding: 8px 20px;
@@ -224,6 +243,11 @@
 <div class="controls">
   <button id="btnStart">▶ 配信開始</button>
   <button id="btnStop">■ 停止</button>
+  <div class="evidence-controls">
+    <button id="btnScreenshot">📸 スクリーンショット</button>
+    <button id="btnRecord">🔴 録画開始</button>
+    <button id="btnStopRecord" style="display:none;">⏹️ 録画停止</button>
+  </div>
 </div>
 
 <div class="main-container">
@@ -270,6 +294,11 @@
   // コメント機能用変数
   const myUserName = 'User-' + Math.random().toString(36).substr(2, 4).toUpperCase();
   let ws = null;
+
+  // エビデンス機能用変数
+  let mediaRecorder = null;
+  let recordedChunks = [];
+  let recordingStartTime = null;
 
   const grid        = document.getElementById('grid');
   const logEl       = document.getElementById('log');
@@ -418,6 +447,89 @@
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendComment();
+    }
+  });
+
+  // ===== エビデンス機能 =====
+  
+  // スクリーンショット機能
+  document.getElementById('btnScreenshot').addEventListener('click', async () => {
+    try {
+      // html2canvasライブラリを使用してスクリーンショット
+      const canvas = await html2canvas(document.body, {
+        backgroundColor: '#0f172a',
+        scale: 2
+      });
+      
+      // ダウンロード
+      const link = document.createElement('a');
+      link.download = `evidence-screenshot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
+      link.href = canvas.toDataURL();
+      link.click();
+      
+      addLog('📸 スクリーンショットを保存しました', 'info');
+    } catch (error) {
+      addLog('❌ スクリーンショット失敗: ' + error.message, 'error');
+    }
+  });
+
+  // 録画開始
+  document.getElementById('btnRecord').addEventListener('click', async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { mediaSource: 'screen' },
+        audio: false
+      });
+
+      recordedChunks = [];
+      recordingStartTime = Date.now();
+
+      mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'video/webm;codecs=vp9'
+      });
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        const duration = Math.floor((Date.now() - recordingStartTime) / 1000);
+        link.download = `evidence-recording-${new Date().toISOString().replace(/[:.]/g, '-')}-${duration}s.webm`;
+        link.click();
+        
+        URL.revokeObjectURL(url);
+        addLog(`🎥 録画を保存しました (${duration}秒)`, 'info');
+      };
+
+      mediaRecorder.start();
+      
+      // UI更新
+      document.getElementById('btnRecord').style.display = 'none';
+      document.getElementById('btnStopRecord').style.display = 'inline-block';
+      
+      addLog('🔴 録画を開始しました', 'info');
+    } catch (error) {
+      addLog('❌ 録画開始失敗: ' + error.message, 'error');
+    }
+  });
+
+  // 録画停止
+  document.getElementById('btnStopRecord').addEventListener('click', () => {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+      
+      // UI更新
+      document.getElementById('btnRecord').style.display = 'inline-block';
+      document.getElementById('btnStopRecord').style.display = 'none';
+      
+      addLog('⏹️ 録画を停止しました', 'info');
     }
   });
 </script>

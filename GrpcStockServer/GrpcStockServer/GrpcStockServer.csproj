@@ -13,6 +13,8 @@
 
   <ItemGroup>
     <PackageReference Include="Grpc.AspNetCore" Version="2.64.0" />
+    <!-- 追加：Postman がサービス定義を自動取得するために必要 -->
+    <PackageReference Include="Grpc.AspNetCore.Server.Reflection" Version="2.64.0" />
   </ItemGroup>
 
 </Project>

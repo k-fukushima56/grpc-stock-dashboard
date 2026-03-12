@@ -18,8 +18,16 @@ message StockPrice {
   string updated_at = 5;  // 更新日時
 }
 
+// 追加：Unary 用リクエスト
+message GetPriceRequest {
+  string symbol = 1;  // 銘柄コード（例: "AAPL"）
+}
+
 // 株価配信サービス
 service StockService {
-  // Server Streaming：リクエスト1回 → 株価データが定期的に流れてくる
+  // 既存：Server Streaming
   rpc StreamPrices (StockRequest) returns (stream StockPrice);
+
+  // 追加：Unary RPC（stream キーワードが付かない）
+  rpc GetPrice (GetPriceRequest) returns (StockPrice);
 }

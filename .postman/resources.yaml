@@ -1,0 +1,11 @@
+# Use this workspace to collaborate
+workspace:
+  id: 597f8a48-4b9a-4aee-836e-fe70b47bb381
+
+localResources:
+  specs:
+    - ..\stock.proto
+    - ..\GrpcStockServer\GrpcStockServer\Protos\comment.proto
+    - ..\GrpcStockServer\GrpcStockServer\Protos\stock.proto
+    - ..\GrpcStockWeb\GrpcStockWeb\Protos\comment.proto
+    - ..\GrpcStockWeb\GrpcStockWeb\Protos\stock.proto

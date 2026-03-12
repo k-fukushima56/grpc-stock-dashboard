@@ -87,4 +87,38 @@ public class StockServiceImpl : StockService.StockServiceBase
 
         _logger.LogInformation("株価配信終了");
     }
+
+    /// <summary>
+    /// Unary RPC
+    /// 指定銘柄の現在価格を1回だけ返す（Postman 手動確認用）
+    /// </summary>
+    public override Task<StockPrice> GetPrice(
+        GetPriceRequest request,
+        ServerCallContext context)
+    {
+        var symbol = request.Symbol.ToUpper();
+
+        // 存在しない銘柄は gRPC ステータスコード NOT_FOUND で返す
+        if (!BasePrices.TryGetValue(symbol, out var price))
+        {
+            throw new RpcException(new Status(
+                StatusCode.NotFound,
+                $"銘柄 '{symbol}' は存在しません。" +
+                $"有効な銘柄: {string.Join(", ", BasePrices.Keys)}"
+            ));
+        }
+
+        var result = new StockPrice
+        {
+            Symbol    = symbol,
+            Price     = price,
+            Change    = 0,
+            ChangePct = 0,
+            UpdatedAt = DateTime.Now.ToString("HH:mm:ss"),
+        };
+
+        _logger.LogInformation("GetPrice: {Symbol} -> {Price}", symbol, price);
+
+        return Task.FromResult(result);
+    }
 }
